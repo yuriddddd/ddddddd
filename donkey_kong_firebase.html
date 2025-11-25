@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>돈키콩 - 전자오락실</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            color: #fff;
+            overflow: hidden;
+        }
+        .container {
+            text-align: center;
+        }
+        #loginScreen, #gameScreen, #gameOverScreen {
+            display: none;
+        }
+        #loginScreen.active, #gameScreen.active, #gameOverScreen.active {
+            display: block;
+        }
+        .login-box {
+            background: #1a1a2e;
+            padding: 40px;
+            border-radius: 10px;
+            border: 4px solid #ff6b6b;
+            box-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+        }
+        h1 {
+            color: #ff6b6b;
+            font-size: 48px;
+            margin-bottom: 10px;
+            text-shadow: 3px 3px #000;
+        }
+        .subtitle {
+            color: #ffd93d;
+            font-size: 16px;
+            margin-bottom: 30px;
+        }
+        input {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 15px 0;
+            background: #0f3460;
+            border: 2px solid #16213e;
+            color: #fff;
+            font-size: 16px;
+            font-family: 'Courier New', monospace;
+            border-radius: 5px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #ff6b6b;
+        }
+        button {
+            padding: 12px 40px;
+            background: #ff6b6b;
+            border: none;
+            color: #fff;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            margin-top: 10px;
+            transition: all 0.3s;
+        }
+        button:hover {
+            background: #ff5252;
+            transform: scale(1.05);
+        }
+        canvas {
+            border: 4px solid #ff6b6b;
+            display: block;
+            margin: 20px auto;
+            background: #000;
+        }
+        .score-info {
+            font-size: 20px;
+            margin: 10px 0;
+            color: #ffd93d;
+        }
+        .controls {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .leaderboard {
+            background: #1a1a2e;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #ff6b6b;
+            margin-top: 20px;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .leaderboard h2 {
+            color: #ffd93d;
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            margin: 5px 0;
+            background: #0f3460;
+            border-radius: 5px;
+        }
+        .rank {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+        .game-over-box {
+            background: #1a1a2e;
+            padding: 40px;
+            border-radius: 10px;
+            border: 4px solid #ff6b6b;
+        }
+        .final-score {
+            font-size: 36px;
+            color: #ffd93d;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 로그인 화면 -->
+        <div id="loginScreen" class="active">
+            <div class="login-box">
+                <h1>🦍 DONKEY KONG 🦍</h1>
+                <div class="subtitle">1990s ARCADE CLASSIC</div>
+                <input type="text" id="playerName" placeholder="이름을 입력하세요" maxlength="20">
+                <input type="text" id="studentId" placeholder="학번을 입력하세요" maxlength="20">
+                <button onclick="startGame()">게임 시작</button>
+            </div>
+        </div>
+
+        <!-- 게임 화면 -->
+        <div id="gameScreen">
+            <h1>🦍 DONKEY KONG 🦍</h1>
+            <div class="score-info">
+                <span id="playerInfo"></span> | 점수: <span id="score">0</span> | 생명: <span id="lives">3</span>
+            </div>
+            <canvas id="gameCanvas" width="600" height="600"></canvas>
+            <div class="controls">
+                ← → 이동 | SPACE 점프
+            </div>
+        </div>
+
+        <!-- 게임오버 화면 -->
+        <div id="gameOverScreen">
+            <div class="game-over-box">
+                <h1>GAME OVER</h1>
+                <div class="final-score">최종 점수: <span id="finalScore">0</span></div>
+                <button onclick="restartGame()">다시 시작</button>
+                <button onclick="goToLogin()">메인으로</button>
+                <div class="leaderboard" id="leaderboard">
+                    <h2>🏆 순위표 🏆</h2>
+                    <div id="leaderboardList">로딩 중...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase 설정
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getDatabase, ref, push, set, onValue, query, orderByChild, limitToLast } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+        // Firebase 설정 (여기에 본인의 Firebase 설정을 입력하세요)
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Firebase 초기화
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        // 게임 변수
+        let canvas, ctx;
+        let player = { x: 50, y: 520, width: 30, height: 30, velocityY: 0, jumping: false };
+        let platforms = [];
+        let barrels = [];
+        let score = 0;
+        let lives = 3;
+        let gameRunning = false;
+        let keys = {};
+        let currentPlayer = { name: '', studentId: '' };
+        let princess = { x: 550, y: 50, width: 30, height: 30 };
+        let donkeyKong = { x: 500, y: 80, width: 50, height: 50 };
+
+        // 게임 시작
+        window.startGame = function() {
+            const name = document.getElementById('playerName').value.trim();
+            const studentId = document.getElementById('studentId').value.trim();
+            
+            if (!name || !studentId) {
+                alert('이름과 학번을 모두 입력해주세요!');
+                return;
+            }
+
+            currentPlayer = { name, studentId };
+            document.getElementById('playerInfo').textContent = `${name} (${studentId})`;
+            
+            document.getElementById('loginScreen').classList.remove('active');
+            document.getElementById('gameScreen').classList.add('active');
+            
+            initGame();
+        };
+
+        function initGame() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            
+            // 플랫폼 생성
+            platforms = [
+                { x: 0, y: 570, width: 600, height: 30 },
+                { x: 100, y: 470, width: 400, height: 20 },
+                { x: 50, y: 370, width: 450, height: 20 },
+                { x: 100, y: 270, width: 400, height: 20 },
+                { x: 50, y: 170, width: 450, height: 20 },
+                { x: 500, y: 100, width: 100, height: 20 }
+            ];
+
+            score = 0;
+            lives = 3;
+            barrels = [];
+            player = { x: 50, y: 520, width: 30, height: 30, velocityY: 0, jumping: false };
+            gameRunning = true;
+
+            document.getElementById('score').textContent = score;
+            document.getElementById('lives').textContent = lives;
+
+            gameLoop();
+        }
+
+        // 키보드 이벤트
+        document.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'Space' && !player.jumping && gameRunning) {
+                player.velocityY = -15;
+                player.jumping = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        // 게임 루프
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 플레이어 이동
+            if (keys['ArrowLeft']) player.x -= 5;
+            if (keys['ArrowRight']) player.x += 5;
+
+            // 경계 체크
+            player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+
+            // 중력
+            player.velocityY += 0.8;
+            player.y += player.velocityY;
+
+            // 플랫폼 충돌
+            let onPlatform = false;
+            for (let platform of platforms) {
+                if (player.x + player.width > platform.x &&
+                    player.x < platform.x + platform.width &&
+                    player.y + player.height >= platform.y &&
+                    player.y + player.height <= platform.y + 20 &&
+                    player.velocityY >= 0) {
+                    player.y = platform.y - player.height;
+                    player.velocityY = 0;
+                    player.jumping = false;
+                    onPlatform = true;
+                }
+            }
+
+            // 바닥으로 떨어짐
+            if (player.y > canvas.height) {
+                loseLife();
+            }
+
+            // 배럴 생성
+            if (Math.random() < 0.02) {
+                barrels.push({ x: donkeyKong.x, y: donkeyKong.y + 40, width: 20, height: 20, velocityY: 3 });
+            }
+
+            // 배럴 업데이트
+            for (let i = barrels.length - 1; i >= 0; i--) {
+                let barrel = barrels[i];
+                barrel.y += barrel.velocityY;
+                barrel.x -= 2;
+
+                // 배럴과 플레이어 충돌
+                if (player.x < barrel.x + barrel.width &&
+                    player.x + player.width > barrel.x &&
+                    player.y < barrel.y + barrel.height &&
+                    player.y + player.height > barrel.y) {
+                    loseLife();
+                    barrels.splice(i, 1);
+                    continue;
+                }
+
+                // 화면 밖으로 나간 배럴 제거
+                if (barrel.y > canvas.height || barrel.x < -50) {
+                    barrels.splice(i, 1);
+                }
+            }
+
+            // 공주 도달 체크
+            if (player.x < princess.x + princess.width &&
+                player.x + player.width > princess.x &&
+                player.y < princess.y + princess.height &&
+                player.y + player.height > princess.y) {
+                score += 100;
+                document.getElementById('score').textContent = score;
+                // 레벨 클리어 - 플레이어 위치 초기화
+                player.x = 50;
+                player.y = 520;
+            }
+
+            // 점수 증가
+            if (Math.random() < 0.01) {
+                score += 10;
+                document.getElementById('score').textContent = score;
+            }
+
+            // 그리기
+            drawGame();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function drawGame() {
+            // 플랫폼
+            ctx.fillStyle = '#ff6b6b';
+            for (let platform of platforms) {
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            }
+
+            // 사다리
+            ctx.strokeStyle = '#ffd93d';
+            ctx.lineWidth = 3;
+            for (let i = 1; i < platforms.length; i++) {
+                let x = platforms[i].x + 50;
+                ctx.beginPath();
+                ctx.moveTo(x, platforms[i].y);
+                ctx.lineTo(x, platforms[i-1].y + 20);
+                ctx.stroke();
+            }
+
+            // 돈키콩
+            ctx.fillStyle = '#8b4513';
+            ctx.fillRect(donkeyKong.x, donkeyKong.y, donkeyKong.width, donkeyKong.height);
+            ctx.fillStyle = '#fff';
+            ctx.font = '30px Arial';
+            ctx.fillText('🦍', donkeyKong.x, donkeyKong.y + 35);
+
+            // 공주
+            ctx.fillStyle = '#ffb6c1';
+            ctx.fillRect(princess.x, princess.y, princess.width, princess.height);
+            ctx.fillStyle = '#fff';
+            ctx.fillText('👸', princess.x, princess.y + 25);
+
+            // 플레이어
+            ctx.fillStyle = '#4ecdc4';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Arial';
+            ctx.fillText('🧍', player.x, player.y + 20);
+
+            // 배럴
+            ctx.fillStyle = '#cd853f';
+            for (let barrel of barrels) {
+                ctx.fillRect(barrel.x, barrel.y, barrel.width, barrel.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '16px Arial';
+                ctx.fillText('🛢️', barrel.x - 5, barrel.y + 15);
+                ctx.fillStyle = '#cd853f';
+            }
+        }
+
+        function loseLife() {
+            lives--;
+            document.getElementById('lives').textContent = lives;
+            
+            if (lives <= 0) {
+                gameOver();
+            } else {
+                // 플레이어 위치 초기화
+                player.x = 50;
+                player.y = 520;
+                player.velocityY = 0;
+                player.jumping = false;
+                barrels = [];
+            }
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('gameScreen').classList.remove('active');
+            document.getElementById('gameOverScreen').classList.add('active');
+
+            // Firebase에 점수 저장
+            saveScore();
+            loadLeaderboard();
+        }
+
+        function saveScore() {
+            const scoresRef = ref(database, 'scores');
+            const newScoreRef = push(scoresRef);
+            set(newScoreRef, {
+                name: currentPlayer.name,
+                studentId: currentPlayer.studentId,
+                score: score,
+                timestamp: Date.now()
+            });
+        }
+
+        function loadLeaderboard() {
+            const scoresRef = ref(database, 'scores');
+            const topScoresQuery = query(scoresRef, orderByChild('score'), limitToLast(10));
+            
+            onValue(topScoresQuery, (snapshot) => {
+                const scores = [];
+                snapshot.forEach((childSnapshot) => {
+                    scores.push(childSnapshot.val());
+                });
+                
+                scores.sort((a, b) => b.score - a.score);
+                
+                let html = '';
+                scores.forEach((item, index) => {
+                    html += `
+                        <div class="leaderboard-item">
+                            <span class="rank">${index + 1}위</span>
+                            <span>${item.name} (${item.studentId})</span>
+                            <span style="color: #ffd93d">${item.score}점</span>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('leaderboardList').innerHTML = html || '아직 기록이 없습니다.';
+            });
+        }
+
+        window.restartGame = function() {
+            document.getElementById('gameOverScreen').classList.remove('active');
+            document.getElementById('gameScreen').classList.add('active');
+            initGame();
+        };
+
+        window.goToLogin = function() {
+            document.getElementById('gameOverScreen').classList.remove('active');
+            document.getElementById('loginScreen').classList.add('active');
+            document.getElementById('playerName').value = '';
+            document.getElementById('studentId').value = '';
+        };
+    </script>
+</body>
+</html>
